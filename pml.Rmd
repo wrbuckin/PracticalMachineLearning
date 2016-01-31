@@ -1,0 +1,96 @@
+---
+title: "PML project"
+output: html_document
+---
+
+Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+Building off of the previous instructions, the analysis commenced by loding the required packages:
+```{r}
+library(AppliedPredictiveModeling)
+library(caret)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library (Hmisc)
+library(ggplot2)
+library(adabag)
+
+```
+The first step, per usual, is to read in the data from the web repository
+```{r}
+url_raw_training <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+file_raw_training <- "./data/pml-training.csv"
+download.file(url=url_raw_training, destfile=file_raw_training, method="curl")
+url_raw_testing <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+file_raw_testing <- "./data/pml-testing.csv"
+download.file(url=url_raw_testing, destfile=file_raw_testing, method="curl")
+```
+Once the data are loaded it is tie to process and clean the data. Removal of N/A's and unecessary columns prepares it for analysis.
+```{r}
+training<-read.csv(file_raw_training)
+testing<-read.csv(file_raw_testing)
+sum(complete.cases(training))
+training <- training[, colSums(is.na(training)) == 0] 
+testing <- testing[, colSums(is.na(testing)) == 0] 
+
+classe <- training$classe
+trainRemove <- grepl("^X|timestamp|window", names(training))
+training <- training[, !trainRemove]
+trainClean <- training[, sapply(training, is.numeric)]
+trainClean$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testing))
+testing <- testing[, !testRemove]
+testClean <- testing[, sapply(testing, is.numeric)]
+```
+
+After these data are cleaned, they need to be divided into a training and testing set per the diretives of reproducible research.
+```{r}
+set.seed(12405) 
+inTrain <- createDataPartition(trainClean$classe, p=0.70, list=F)
+trainData <- trainClean[inTrain, ]
+testData <- trainClean[-inTrain, ]
+```
+Once split it is time to analyze the dataset. The first attempt at modelling used a Bagging Analysis.
+```{r}
+
+bagModel <- bagging(classe ~ ., data = trainData)
+
+predictions2 <- predict(bagModel, newdata=testing); tail(predictions2, 20)
+```
+Lacking clear confidence metrics I next chose to run a random forest analysis.
+```{r}
+rfModel <- train(classe ~ ., method="rf", preProcess=c("center", "scale"), trControl=trainControl(method = "cv", number = 5), data=trainData, ntree=250)
+rfModel
+
+predictions <- predict(rfModel, newdata=testData)
+confusionMatrix(testData$classe, predictions)
+print(predict(rfModel, newdata=testing))
+```
+Based on the output, I chose to submit the random forest results as the final output. 
+Conclusion
+The Random Forest resulted in a 95% accuracy rate when submitted to the website. Further modelling would be in order if greater accuracy was required.
+
+Appendix
+The tree plot below shows the breakdown of the data prior to analysis, leading to the choice of bagging and a random forest
+```{r}
+tModel <- rpart(classe ~ ., data=trainData, method="class")
+fancyRpartPlot(tModel) 
+
+
+```
+
